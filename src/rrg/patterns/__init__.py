@@ -18,6 +18,10 @@ class PatternType(Enum):
     INCOMPLETE_REASONING = auto()
     SELF_CONTRADICTION = auto()
     UNGROUNDED_ASSUMPTION = auto()
+    EARLY_PRUNING = auto()
+    PATH_LOCK_IN = auto()
+    BOUNDARY_VIOLATION = auto()
+    KNOWLEDGE_PRIORITIZATION_FAILURE = auto()
 
 
 @dataclass(frozen=True)
@@ -78,3 +82,28 @@ class ReasoningStep:
     def __repr__(self) -> str:
         preview = self.content[:60] + "..." if len(self.content) > 60 else self.content
         return f"<ReasoningStep {self.step_id}: {preview}>"
+
+
+# ---------------------------------------------------------------------------
+# Exports — step 2: four implicit pattern detectors
+# ---------------------------------------------------------------------------
+from rrg.patterns.early_pruning import EarlyPruningDetector
+from rrg.patterns.path_lockin import PathLockInDetector
+from rrg.patterns.boundary_violation import BoundaryViolationDetector, BoundarySpec
+from rrg.patterns.knowledge_prioritization import KnowledgeGuidedPrioritizationChecker
+
+__all__ = [
+    # Base
+    "PatternType",
+    "PatternMatch",
+    "PatternDetector",
+    "BasePatternDetector",
+    "ReasoningTrace",
+    "ReasoningStep",
+    # Step 2 detectors
+    "EarlyPruningDetector",
+    "PathLockInDetector",
+    "BoundaryViolationDetector",
+    "BoundarySpec",
+    "KnowledgeGuidedPrioritizationChecker",
+]
