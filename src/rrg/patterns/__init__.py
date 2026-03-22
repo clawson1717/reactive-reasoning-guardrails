@@ -18,6 +18,10 @@ class PatternType(Enum):
     INCOMPLETE_REASONING = auto()
     SELF_CONTRADICTION = auto()
     UNGROUNDED_ASSUMPTION = auto()
+    EARLY_PRUNING = auto()
+    PATH_LOCK_IN = auto()
+    BOUNDARY_VIOLATION = auto()
+    KNOWLEDGE_PRIORITIZATION_FAILURE = auto()
 
 
 @dataclass(frozen=True)
