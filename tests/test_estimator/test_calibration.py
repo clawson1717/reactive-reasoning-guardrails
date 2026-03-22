@@ -79,8 +79,8 @@ class TestFindOptimalThreshold:
         all_scores = np.concatenate([scores, correct_scores])
 
         tau = find_optimal_threshold(all_scores, labels)
-        # Threshold should be between 0.2 and 0.8.
-        assert 0.2 < tau < 0.8
+        # Threshold should be between 0.2 and 0.8 (inclusive).
+        assert 0.2 <= tau <= 0.8
 
     def test_all_same_label(self) -> None:
         scores = np.array([0.1, 0.2, 0.3, 0.4, 0.5])

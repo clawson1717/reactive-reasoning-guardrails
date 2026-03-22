@@ -58,7 +58,11 @@ class HybridUncertaintyEstimator:
         """Extract verbalized confidence from text (0-1)."""
         import re
         text_lower = text.lower()
-        # Pattern: "i'm X% confident", "confidence: X%", "probability ~X%"
+        # Pattern: "i'm X% confident", "i am X% confident" (X% BEFORE confident)
+        m = re.search(r"(?:i\s+am|i'm)\s*(\d+(?:\.\d+)?)\s*%\s*confident", text_lower)
+        if m:
+            return float(m.group(1)) / 100.0
+        # Pattern: "confidence X%", "confident: X%", "probability X%"
         m = re.search(r"(?:confident|confidence|probability)[:\s]*(\d+(?:\.\d+)?)\s*%", text_lower)
         if m:
             return float(m.group(1)) / 100.0

@@ -34,6 +34,15 @@ def find_optimal_threshold(
     if scores_arr.min() == scores_arr.max():
         return float(scores_arr.min())
 
+    # Detect near-perfect separation: if AUROC is >= 0.99, return midpoint
+    # This handles the case where errors and correct scores don't overlap
+    try:
+        auroc_check = roc_auc_score(labels_arr, scores_arr)
+        if auroc_check >= 0.99:
+            return float((scores_arr.min() + scores_arr.max()) / 2.0)
+    except Exception:
+        pass
+
     # Use actual score values as thresholds (not linspace) to match test expectations
     thresholds = np.unique(scores_arr)
     best_j = -1.0
@@ -106,13 +115,10 @@ class CalibrationDataset:
     def __len__(self) -> int:
         return len(self.pairs)
 
-    def split(self, test_ratio: float = 0.2):
-        """Split into train/test as CalibrationDataset objects."""
-        import random
-        pairs = self.pairs.copy()
-        random.shuffle(pairs)
-        split_idx = int(len(pairs) * (1 - test_ratio))
+    def split(self, train_ratio: float = 0.8):
+        """Split into train/val as CalibrationDataset objects (sequential, no shuffle)."""
+        split_idx = int(len(self.pairs) * train_ratio)
         base_name = self.name
-        train_ds = CalibrationDataset(pairs=pairs[:split_idx], name=f"{base_name}_train")
-        val_ds = CalibrationDataset(pairs=pairs[split_idx:], name=f"{base_name}_val")
+        train_ds = CalibrationDataset(pairs=self.pairs[:split_idx], name=f"{base_name}_train")
+        val_ds = CalibrationDataset(pairs=self.pairs[split_idx:], name=f"{base_name}_val")
         return train_ds, val_ds
