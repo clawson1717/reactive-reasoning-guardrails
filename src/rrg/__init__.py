@@ -17,6 +17,14 @@ from rrg.core import (
     ReasoningTrace,
 )
 
+# Orchestrator
+from rrg.core import (
+    PatternDetectorRegistry,
+    ReactiveReasoningLoop,
+    ReactiveReasoningResult,
+    ReasoningAuditLog,
+)
+
 # Patterns
 from rrg.patterns import (
     BasePatternDetector,
@@ -60,6 +68,11 @@ __all__ = [
     "ReasoningResult",
     "ReasoningStep",
     "ReasoningTrace",
+    # Orchestrator
+    "PatternDetectorRegistry",
+    "ReactiveReasoningLoop",
+    "ReactiveReasoningResult",
+    "ReasoningAuditLog",
     # Patterns
     "BasePatternDetector",
     "PatternDetector",
