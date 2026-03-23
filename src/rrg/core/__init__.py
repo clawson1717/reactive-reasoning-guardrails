@@ -14,6 +14,15 @@ logger = structlog.get_logger()
 
 T = TypeVar("T")
 
+# Orchestrator (must be imported after defining base classes to avoid circular deps)
+from rrg.core.orchestrator import (
+    PatternDetectorRegistry,
+    ReactiveReasoningLoop,
+    ReactiveReasoningResult,
+    ReasoningAuditLog,
+    ReasoningAuditLogEntry,
+)
+
 
 @dataclass
 class ReasoningResult:
