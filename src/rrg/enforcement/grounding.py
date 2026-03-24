@@ -1,4 +1,5 @@
-"""MemoryGroundingLayer: episodic buffer and hallucination detection via keyword overlap."""
+"""MemoryGroundingLayer: episodic buffer and hallucination detection via keyword overlap.
+ContextExpander: retrieves relevant episodic context for injection during correction."""
 
 from __future__ import annotations
 
@@ -8,6 +9,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 import structlog
+
+from rrg.patterns import EarlyPruningDetector, PatternType, ReasoningTrace
 
 logger = structlog.get_logger()
 
@@ -211,3 +214,85 @@ class MemoryGroundingLayer:
                 ungrounded_flags.append(num)
 
         return ungrounded_flags
+
+
+class ContextExpander:
+    """Retrieves relevant episodic context and formats it for injection.
+
+    Used during correction to ground re-prompted reasoning in stored context
+    rather than letting the model hallucinate freely.
+
+    Attributes:
+        grounding_layer: The MemoryGroundingLayer to query.
+        early_pruning_detector: Optional detector whose pattern type triggers expansion.
+        top_k: Maximum number of context chunks to retrieve.
+    """
+
+    def __init__(
+        self,
+        grounding_layer: MemoryGroundingLayer,
+        early_pruning_detector: EarlyPruningDetector | None = None,
+        top_k: int = 3,
+    ) -> None:
+        self.grounding_layer = grounding_layer
+        self.early_pruning_detector = early_pruning_detector
+        self.top_k = top_k
+        self._logger = logger.bind(component="ContextExpander")
+
+    def should_expand(self, trace: ReasoningTrace, trigger_pattern: PatternType | None) -> bool:
+        """Determine if context expansion is warranted.
+
+        Returns True when:
+        - trigger_pattern is None (expansion always useful when no specific trigger)
+        - trigger_pattern is EARLY_PRUNING
+        - trigger_pattern is KNOWLEDGE_PRIORITIZATION_FAILURE
+        """
+        if trigger_pattern is None:
+            return True
+        return trigger_pattern in (
+            PatternType.EARLY_PRUNING,
+            PatternType.KNOWLEDGE_PRIORITIZATION_FAILURE,
+        )
+
+    def expand(self, trace: ReasoningTrace, trigger_pattern: PatternType | None = None) -> str:
+        """Return formatted context string for injection.
+
+        If trigger_pattern is EARLY_PRUNING or None, retrieves top_k chunks
+        from the episodic buffer most relevant to the trace's final_answer.
+        Returns empty string if no grounding_layer is available.
+
+        Args:
+            trace: The reasoning trace to expand context for.
+            trigger_pattern: The pattern that triggered the correction, if any.
+
+        Returns:
+            A formatted string of relevant context chunks, or empty string if
+            expansion is not warranted or no grounding layer is available.
+        """
+        if not self.should_expand(trace, trigger_pattern):
+            return ""
+
+        if self.grounding_layer is None:
+            return ""
+
+        query = trace.final_answer
+        if not query:
+            # Fall back to concatenating step content
+            query = " ".join(s.content for s in trace.steps)
+
+        chunks = self.grounding_layer.get_relevant_context(query, k=self.top_k)
+        if not chunks:
+            self._logger.debug("no_relevant_context_found", query=query[:50])
+            return ""
+
+        formatted = "\n".join(f"- {content}" for content, _ in chunks)
+        result = f"Relevant context:\n{formatted}"
+        self._logger.debug("context_expanded", chunk_count=len(chunks), query=query[:50])
+        return result
+
+
+__all__ = [
+    "ContextExpander",
+    "EpisodeChunk",
+    "MemoryGroundingLayer",
+]

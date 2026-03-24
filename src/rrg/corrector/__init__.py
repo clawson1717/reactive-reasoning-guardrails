@@ -89,6 +89,8 @@ class CorrectionEngine:
         trace: Any,  # ReasoningTrace
         pattern_matches: tuple[PatternMatch, ...],
         uncertainty: UncertaintyScore | None,
+        grounding_context: str | None = None,
+        dominant_pattern: Any = None,  # PatternType | None
     ) -> CorrectionResult:
         """Select and apply the best correction strategy for the given issues."""
         strategy = self._select_strategy(pattern_matches, uncertainty)
