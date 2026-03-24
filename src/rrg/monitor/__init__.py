@@ -9,8 +9,9 @@ import structlog
 
 from rrg.core import ReasoningAgent, ReasoningResult, ReasoningTrace
 from rrg.corrector import CorrectionEngine, CorrectionResult, CorrectionStrategy
+from rrg.enforcement import ContextExpander
 from rrg.estimator import UncertaintyEstimator, UncertaintyScore
-from rrg.patterns import PatternDetector, PatternMatch, ReasoningStep
+from rrg.patterns import PatternDetector, PatternMatch, PatternType, ReasoningStep
 
 logger = structlog.get_logger()
 
@@ -56,12 +57,14 @@ class GuardrailMonitor:
         uncertainty_estimator: UncertaintyEstimator | None = None,
         correction_engine: CorrectionEngine | None = None,
         config: GuardrailConfig | None = None,
+        context_expander: ContextExpander | None = None,
     ) -> None:
         self.agent = agent
         self.pattern_detectors: list[PatternDetector] = pattern_detectors or []
         self.uncertainty_estimator = uncertainty_estimator
         self.correction_engine = correction_engine or CorrectionEngine()
         self.config = config or GuardrailConfig()
+        self.context_expander = context_expander
         self._logger = logger.bind(component="GuardrailMonitor")
 
     def run(self, prompt: str, **kwargs: Any) -> GuardrailDecision:
@@ -82,8 +85,12 @@ class GuardrailMonitor:
         # 2. Run pattern detectors
         pattern_matches = self._detect_patterns(trace)
 
-        # 3. Estimate uncertainty
-        uncertainty = self._estimate_uncertainty(trace)
+        # 3. Estimate uncertainty (pass dominant pattern type for context-aware estimation)
+        dominant_pattern: PatternType | None = (
+            max(pattern_matches, key=lambda m: m.confidence).pattern_type
+            if pattern_matches else None
+        )
+        uncertainty = self._estimate_uncertainty(trace, dominant_pattern)
 
         # 4. Decide whether to accept or correct
         issues_found = bool(pattern_matches) or (uncertainty and uncertainty.is_uncertain)
@@ -103,11 +110,17 @@ class GuardrailMonitor:
             return decision
 
         # 5. Attempt corrections
+        grounding_context = ""
+        if self.context_expander is not None:
+            grounding_context = self.context_expander.expand(trace, dominant_pattern)
+
         correction_result = self.correction_engine.correct(
             response=result.response,
             trace=trace,
             pattern_matches=pattern_matches,
             uncertainty=uncertainty,
+            grounding_context=grounding_context if grounding_context else None,
+            dominant_pattern=dominant_pattern,
         )
 
         if correction_result.accepted and correction_result.corrected_response:
@@ -147,8 +160,14 @@ class GuardrailMonitor:
         filtered = tuple(m for m in all_matches if m.confidence >= threshold)
         return filtered
 
-    def _estimate_uncertainty(self, trace: ReasoningTrace) -> UncertaintyScore | None:
-        """Estimate uncertainty from reasoning steps."""
+    def _estimate_uncertainty(self, trace: ReasoningTrace, dominant_pattern: PatternType | None = None) -> UncertaintyScore | None:
+        """Estimate uncertainty from reasoning steps.
+
+        Args:
+            trace: The reasoning trace to estimate uncertainty for.
+            dominant_pattern: The dominant pattern type, if one was detected.
+                Passed to the estimator to allow context-aware uncertainty estimation.
+        """
         if self.uncertainty_estimator is None:
             return None
 

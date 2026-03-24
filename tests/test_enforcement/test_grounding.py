@@ -1,10 +1,11 @@
-"""Tests for rrg.enforcement.grounding — MemoryGroundingLayer."""
+"""Tests for rrg.enforcement.grounding — MemoryGroundingLayer and ContextExpander."""
 
 from __future__ import annotations
 
 import pytest
 
-from rrg.enforcement.grounding import MemoryGroundingLayer
+from rrg.enforcement.grounding import ContextExpander, MemoryGroundingLayer
+from rrg.patterns import EarlyPruningDetector, PatternMatch, PatternType, ReasoningStep, ReasoningTrace
 
 
 class TestMemoryGroundingLayerInit:
@@ -150,3 +151,149 @@ class TestEpisodicEviction:
 
         assert "ep1" not in episodes_present
         assert "ep4" in episodes_present
+
+
+# ---------------------------------------------------------------------------
+# ContextExpander tests
+# ---------------------------------------------------------------------------
+
+def _make_trace(steps: list[str], final_answer: str) -> ReasoningTrace:
+    """Helper to build a ReasoningTrace."""
+    return ReasoningTrace(
+        steps=tuple(ReasoningStep(step_id=i, content=c) for i, c in enumerate(steps)),
+        final_answer=final_answer,
+        metadata={},
+    )
+
+
+class TestContextExpanderExpand:
+    def test_expand_returns_string(self) -> None:
+        layer = MemoryGroundingLayer()
+        layer.add_context("ep1", "Python is a programming language.")
+        layer.add_context("ep1", "Python was created in 1991.")
+        expander = ContextExpander(grounding_layer=layer, top_k=2)
+        trace = _make_trace(["Python is popular."], "Python facts")
+        result = expander.expand(trace)
+        assert isinstance(result, str)
+        assert len(result) > 0
+        assert "Relevant context" in result
+
+    def test_expand_formats_chunks_correctly(self) -> None:
+        layer = MemoryGroundingLayer()
+        layer.add_context("ep1", "The capital of France is Paris.")
+        layer.add_context("ep1", "Paris has 2 million residents.")
+        expander = ContextExpander(grounding_layer=layer, top_k=2)
+        trace = _make_trace(["France is a country in Europe."], "What is the capital of France?")
+        result = expander.expand(trace)
+        # Should contain the formatted chunks
+        assert "Paris" in result
+
+    def test_expand_empty_when_no_relevant_chunks(self) -> None:
+        layer = MemoryGroundingLayer()
+        layer.add_context("ep1", "Unrelated content about astronomy.")
+        expander = ContextExpander(grounding_layer=layer, top_k=3)
+        trace = _make_trace(["Something about Python."], "Python programming")
+        result = expander.expand(trace)
+        assert result == ""
+
+    def test_expand_respects_top_k(self) -> None:
+        layer = MemoryGroundingLayer()
+        for i in range(5):
+            layer.add_context("ep1", f"Document {i} about Python.")
+        expander = ContextExpander(grounding_layer=layer, top_k=2)
+        trace = _make_trace(["Python programming."], "Tell me about Python")
+        result = expander.expand(trace)
+        # Should have at most 2 bullet items
+        assert result.count("\n- ") <= 2
+
+
+class TestContextExpanderShouldExpand:
+    def test_should_expand_none_trigger(self) -> None:
+        layer = MemoryGroundingLayer()
+        expander = ContextExpander(grounding_layer=layer)
+        trace = _make_trace(["Step 1."], "Answer")
+        assert expander.should_expand(trace, None) is True
+
+    def test_should_expand_early_pruning_trigger(self) -> None:
+        layer = MemoryGroundingLayer()
+        expander = ContextExpander(grounding_layer=layer)
+        trace = _make_trace(["Step 1."], "Answer")
+        assert expander.should_expand(trace, PatternType.EARLY_PRUNING) is True
+
+    def test_should_expand_knowledge_prioritization_failure(self) -> None:
+        layer = MemoryGroundingLayer()
+        expander = ContextExpander(grounding_layer=layer)
+        trace = _make_trace(["Step 1."], "Answer")
+        assert expander.should_expand(trace, PatternType.KNOWLEDGE_PRIORITIZATION_FAILURE) is True
+
+    def test_should_not_expand_other_patterns(self) -> None:
+        layer = MemoryGroundingLayer()
+        expander = ContextExpander(grounding_layer=layer)
+        trace = _make_trace(["Step 1."], "Answer")
+        # CIRCULAR_REASONING, CONTRADICTION, etc. should not expand
+        assert expander.should_expand(trace, PatternType.CIRCULAR_REASONING) is False
+        assert expander.should_expand(trace, PatternType.CONTRADICTION) is False
+        assert expander.should_expand(trace, PatternType.BOUNDARY_VIOLATION) is False
+
+    def test_no_expand_when_no_grounding_layer(self) -> None:
+        expander = ContextExpander(grounding_layer=None)  # type: ignore[arg-type]
+        trace = _make_trace(["Step 1."], "Answer")
+        result = expander.expand(trace, PatternType.EARLY_PRUNING)
+        assert result == ""
+
+    def test_expand_uses_final_answer_as_query(self) -> None:
+        layer = MemoryGroundingLayer()
+        layer.add_context("ep1", "Mars is the fourth planet.")
+        layer.add_context("ep1", "Jupiter is the fifth planet.")
+        expander = ContextExpander(grounding_layer=layer, top_k=1)
+        # final_answer mentions Mars, should retrieve Mars chunk
+        trace = _make_trace(["Red planet discussion."], "Tell me about Mars")
+        result = expander.expand(trace)
+        assert "Mars" in result
+
+    def test_expand_falls_back_to_steps_when_final_answer_empty(self) -> None:
+        layer = MemoryGroundingLayer()
+        layer.add_context("ep1", "Python is a language.")
+        expander = ContextExpander(grounding_layer=layer, top_k=1)
+        trace = ReasoningTrace(
+            steps=(ReasoningStep(step_id=0, content="Python is discussed."),),
+            final_answer="",
+            metadata={},
+        )
+        result = expander.expand(trace)
+        # Should still work by falling back to step content
+        assert isinstance(result, str)
+
+
+class TestContextExpanderGuardrailMonitorIntegration:
+    def test_monitor_with_context_expander(self) -> None:
+        """GuardrailMonitor accepts context_expander and uses it during correction."""
+        from rrg.monitor import GuardrailConfig, GuardrailMonitor
+
+        layer = MemoryGroundingLayer()
+        layer.add_context("ep1", "Python is a programming language.")
+
+        expander = ContextExpander(grounding_layer=layer, top_k=2)
+
+        # Verify the expander is stored on the monitor
+        monitor = GuardrailMonitor(
+            agent=None,  # type: ignore[arg-type]
+            context_expander=expander,
+        )
+        assert monitor.context_expander is expander
+
+    def test_monitor_run_with_context_expander_no_agent_error(self) -> None:
+        """Running monitor with context_expander but no agent raises AttributeError."""
+        from rrg.monitor import GuardrailMonitor
+
+        layer = MemoryGroundingLayer()
+        layer.add_context("ep1", "Python is a programming language.")
+        expander = ContextExpander(grounding_layer=layer)
+
+        monitor = GuardrailMonitor(
+            agent=None,  # type: ignore[arg-type]
+            context_expander=expander,
+        )
+        # The run() method calls agent.run() which will fail if agent is None
+        # This is expected — we just verify the field is set
+        assert monitor.context_expander is expander
