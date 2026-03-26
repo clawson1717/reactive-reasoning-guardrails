@@ -7,6 +7,7 @@ src/reactive_reasoning_guardrails.egg-info/requires.txt
 src/reactive_reasoning_guardrails.egg-info/top_level.txt
 src/rrg/__init__.py
 src/rrg/core/__init__.py
+src/rrg/core/orchestrator.py
 src/rrg/corrector/__init__.py
 src/rrg/enforcement/__init__.py
 src/rrg/enforcement/boundary.py
@@ -14,6 +15,8 @@ src/rrg/enforcement/enforcement_layer.py
 src/rrg/enforcement/grounding.py
 src/rrg/enforcement/structured_inference.py
 src/rrg/estimator/__init__.py
+src/rrg/estimator/calibration.py
+src/rrg/estimator/hybrid_estimator.py
 src/rrg/monitor/__init__.py
 src/rrg/patterns/__init__.py
 src/rrg/patterns/boundary_violation.py
@@ -24,5 +27,6 @@ tests/test_core.py
 tests/test_corrector.py
 tests/test_estimator.py
 tests/test_monitor.py
+tests/test_orchestrator.py
 tests/test_pattern_detectors.py
 tests/test_patterns.py

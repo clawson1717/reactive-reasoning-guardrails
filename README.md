@@ -209,7 +209,7 @@ python -m benchmarks.adversarial_boundary --adversarial-mode aggressive
 
 ## Roadmap
 
-### v0.1 — Core Framework (current: Steps 5-7 complete ✅)
+### v0.1 — Core Framework (current: Steps 5-9 complete ✅)
 - [x] Step 1: Project scaffolding and core abstractions
 - [x] Step 2: Four implicit pattern detectors
 - [x] Step 3: Boundary enforcement, memory grounding, structured inference layers
@@ -217,8 +217,8 @@ python -m benchmarks.adversarial_boundary --adversarial-mode aggressive
 - [x] Step 5: Guardrail monitor and reactive trigger system
 - [x] Step 6: Dynamic correction engine with backtracking and multi-pass forcing
 - [x] Step 7: `ReactiveReasoningLoop` orchestrator
-- [ ] Step 8: Integration with memory grounding
-- [ ] Step 9: Reactive reasoning loop with audit logging
+- [x] Step 8: Integration with memory grounding
+- [x] Step 9: Reactive reasoning loop with audit logging
 - [ ] Step 10: Evaluation harness (pattern injection, uncertainty calibration, adversarial boundary)
 - [ ] Step 11: Minimal examples and documentation
 - [ ] Step 12: Performance profiling and optimization
