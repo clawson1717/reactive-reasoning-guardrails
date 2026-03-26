@@ -42,7 +42,11 @@ class HybridUncertaintyEstimator:
         return s1, s2
 
     def _semantic_consistency(self, texts: list[str]) -> float:
-        """Compute cosine similarity between embeddings of multiple samples."""
+        """Compute cosine similarity between embeddings of multiple samples.
+
+        Returns a value in [0, 1], clamped so the result is always a valid
+        consistency score (1=agree, 0=disagree).
+        """
         if len(texts) < 2:
             return 1.0
         embeddings = [self.embedding.embed(t) for t in texts]
@@ -52,7 +56,7 @@ class HybridUncertaintyEstimator:
             for j in range(i + 1, len(embeddings)):
                 sim = 1 - cosine(embeddings[i], embeddings[j])
                 sims.append(sim)
-        return float(np.mean(sims))
+        return float(np.clip(np.mean(sims), 0.0, 1.0))
 
     def _extract_verbalized_confidence(self, text: str) -> float:
         """Extract verbalized confidence from text (0-1)."""
